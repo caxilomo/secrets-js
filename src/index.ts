@@ -2,9 +2,16 @@
 
 import fs from 'fs';
 import crypto from 'crypto';
-import { keysExists, truncate } from './appiclation/services';
+import {
+  encryptedFileExists,
+  keysExists,
+  loadSecrets,
+  truncate,
+} from './appiclation/services';
 import { GenerateKeypairHandler } from './appiclation/generate-keypair/generate-keypair.handler';
 import { GenerateKeypairCommand } from './appiclation/generate-keypair/generate-keypair.command';
+import { ListHandler } from './appiclation/list/list.handler';
+import { ListCommand } from './appiclation/list/list.command';
 
 const args = process.argv;
 const privateKeyPath = process.env.PWD + '/private.pem';
@@ -48,6 +55,15 @@ function handleGenerateKeyPair() {
   console.table(result);
 }
 
+function handleList() {
+  const handler: ListHandler = new ListHandler();
+  const command: ListCommand = new ListCommand(encryptedDataPath);
+
+  const result = handler.handle(command);
+
+  console.table(result);
+}
+
 function encrypt(toEncrypt, publicKey) {
   const buffer = Buffer.from(toEncrypt, 'utf8');
   const encrypted = crypto.publicEncrypt(publicKey, buffer);
@@ -60,39 +76,6 @@ function decrypt(toDecrypt, privateKey) {
   const decrypted = crypto.privateDecrypt(privateKey, buffer);
 
   return decrypted.toString('utf8');
-}
-
-function encryptedFileExists() {
-  return fs.existsSync(encryptedDataPath);
-}
-
-function loadSecrets(truncateValue = false) {
-  const readStream = fs.readFileSync(encryptedDataPath);
-  const data = readStream.toString().split('\n');
-  const dataArray = [];
-
-  data.forEach((line) => {
-    if (!line) {
-      return;
-    }
-    const lineArray = line.split('=');
-    dataArray.push({
-      key: lineArray[0],
-      value: truncateValue ? truncate(lineArray[1]) : lineArray[1],
-    });
-  });
-
-  return dataArray;
-}
-
-function handleList() {
-  if (!encryptedFileExists()) {
-    console.error('Secrets file not found.\n');
-    process.exit(1);
-  }
-
-  const secrets = loadSecrets(true);
-  console.table(secrets);
 }
 
 function handleSet() {
@@ -114,7 +97,7 @@ function handleSet() {
 }
 
 function handleGet() {
-  if (!encryptedFileExists()) {
+  if (!encryptedFileExists(encryptedDataPath)) {
     console.error('Secrets file not found.\n');
     process.exit(1);
   }
@@ -126,7 +109,7 @@ function handleGet() {
 
   const keyToFind = args[3].toUpperCase();
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8').toString();
-  loadSecrets().forEach((secret) => {
+  loadSecrets(encryptedDataPath).forEach((secret) => {
     if (secret.key === keyToFind) {
       secret.value = decrypt(secret.value, privateKey);
       console.table([secret]);
@@ -139,7 +122,7 @@ function handleGet() {
 }
 
 function handleDump() {
-  if (!encryptedFileExists()) {
+  if (!encryptedFileExists(encryptedDataPath)) {
     console.error('Secrets file not found.\n');
     process.exit(1);
   }
@@ -151,7 +134,7 @@ function handleDump() {
 
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8').toString();
   const dumpedContent = [];
-  loadSecrets().forEach((secret) => {
+  loadSecrets(encryptedDataPath).forEach((secret) => {
     secret.value = decrypt(secret.value, privateKey);
     dumpedContent.push(secret.key + '=' + secret.value);
   });
