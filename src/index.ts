@@ -12,6 +12,10 @@ import { GenerateKeypairHandler } from './appiclation/generate-keypair/generate-
 import { GenerateKeypairCommand } from './appiclation/generate-keypair/generate-keypair.command';
 import { ListHandler } from './appiclation/list/list.handler';
 import { ListCommand } from './appiclation/list/list.command';
+import { KeyPairNotFoundException } from './domain/exception/key-pair-not-found.exception';
+import { SecretsFileNotFoundException } from './domain/exception/secrets-file-not-found.exception';
+import { SetHandler } from './appiclation/set/set.handler';
+import { SetCommand } from './appiclation/set/set.command';
 
 const args = process.argv;
 const privateKeyPath = process.env.PWD + '/private.pem';
@@ -64,11 +68,19 @@ function handleList() {
   console.table(result);
 }
 
-function encrypt(toEncrypt, publicKey) {
-  const buffer = Buffer.from(toEncrypt, 'utf8');
-  const encrypted = crypto.publicEncrypt(publicKey, buffer);
+function handleSet() {
+  const handler: SetHandler = new SetHandler();
+  const command: SetCommand = new SetCommand(
+    privateKeyPath,
+    publicKeyPath,
+    encryptedDataPath,
+    args[3],
+    args[4],
+  );
 
-  return encrypted.toString('base64');
+  const result = handler.handle(command);
+
+  console.table(result);
 }
 
 function decrypt(toDecrypt, privateKey) {
@@ -78,33 +90,13 @@ function decrypt(toDecrypt, privateKey) {
   return decrypted.toString('utf8');
 }
 
-function handleSet() {
-  if (!keysExists(privateKeyPath, publicKeyPath)) {
-    console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
-    process.exit(1);
-  }
-
-  const publicKey = fs.readFileSync(publicKeyPath, 'utf8').toString();
-  const key = args[3];
-  const value = args[4];
-  const encryptedValue = encrypt(value, publicKey);
-  fs.appendFileSync(
-    encryptedDataPath,
-    key.toUpperCase() + '=' + encryptedValue + '\n',
-  );
-
-  console.table([{ key: key.toUpperCase(), value: truncate(encryptedValue) }]);
-}
-
 function handleGet() {
   if (!encryptedFileExists(encryptedDataPath)) {
-    console.error('Secrets file not found.\n');
-    process.exit(1);
+    throw new SecretsFileNotFoundException();
   }
 
   if (!keysExists(privateKeyPath, publicKeyPath)) {
-    console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
-    process.exit(1);
+    throw new KeyPairNotFoundException();
   }
 
   const keyToFind = args[3].toUpperCase();
@@ -114,22 +106,20 @@ function handleGet() {
       secret.value = decrypt(secret.value, privateKey);
       console.table([secret]);
 
-      process.exit(0);
+      return;
     }
   });
 
-  console.error('Secret not found.\n');
+  throw new SecretsFileNotFoundException();
 }
 
 function handleDump() {
   if (!encryptedFileExists(encryptedDataPath)) {
-    console.error('Secrets file not found.\n');
-    process.exit(1);
+    throw new SecretsFileNotFoundException();
   }
 
   if (!keysExists(privateKeyPath, publicKeyPath)) {
-    console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
-    process.exit(1);
+    throw new KeyPairNotFoundException();
   }
 
   const privateKey = fs.readFileSync(privateKeyPath, 'utf8').toString();
