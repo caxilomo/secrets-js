@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
 import fs from 'fs';
-import crypto from 'crypto';
 import {
+  decrypt,
   encryptedFileExists,
   keysExists,
   loadSecrets,
-  truncate,
 } from './appiclation/services';
 import { GenerateKeypairHandler } from './appiclation/generate-keypair/generate-keypair.handler';
 import { GenerateKeypairCommand } from './appiclation/generate-keypair/generate-keypair.command';
@@ -16,6 +15,8 @@ import { KeyPairNotFoundException } from './domain/exception/key-pair-not-found.
 import { SecretsFileNotFoundException } from './domain/exception/secrets-file-not-found.exception';
 import { SetHandler } from './appiclation/set/set.handler';
 import { SetCommand } from './appiclation/set/set.command';
+import { GetHandler } from './appiclation/get/get.handler';
+import { GetCommand } from './appiclation/get/get.command';
 
 const args = process.argv;
 const privateKeyPath = process.env.PWD + '/private.pem';
@@ -83,34 +84,18 @@ function handleSet() {
   console.table(result);
 }
 
-function decrypt(toDecrypt, privateKey) {
-  const buffer = Buffer.from(toDecrypt, 'base64');
-  const decrypted = crypto.privateDecrypt(privateKey, buffer);
-
-  return decrypted.toString('utf8');
-}
-
 function handleGet() {
-  if (!encryptedFileExists(encryptedDataPath)) {
-    throw new SecretsFileNotFoundException();
-  }
+  const handler: GetHandler = new GetHandler();
+  const command: GetCommand = new GetCommand(
+    privateKeyPath,
+    publicKeyPath,
+    encryptedDataPath,
+    args[3].toUpperCase(),
+  );
 
-  if (!keysExists(privateKeyPath, publicKeyPath)) {
-    throw new KeyPairNotFoundException();
-  }
+  const result = handler.handle(command);
 
-  const keyToFind = args[3].toUpperCase();
-  const privateKey = fs.readFileSync(privateKeyPath, 'utf8').toString();
-  loadSecrets(encryptedDataPath).forEach((secret) => {
-    if (secret.key === keyToFind) {
-      secret.value = decrypt(secret.value, privateKey);
-      console.table([secret]);
-
-      return;
-    }
-  });
-
-  throw new SecretsFileNotFoundException();
+  console.table(result);
 }
 
 function handleDump() {
