@@ -2,6 +2,9 @@
 
 import fs from 'fs';
 import crypto from 'crypto';
+import { keysExists, truncate } from './appiclation/services';
+import { GenerateKeypairHandler } from './appiclation/generate-keypair/generate-keypair.handler';
+import { GenerateKeypairCommand } from './appiclation/generate-keypair/generate-keypair.command';
 
 const args = process.argv;
 const privateKeyPath = process.env.PWD + '/private.pem';
@@ -12,7 +15,7 @@ const decryptedDataPath = process.env.PWD + '/.env';
 const subcommand = args[2];
 
 const commandHandler = {
-  'generate-keypair': handleGenereateKeyPair,
+  'generate-keypair': handleGenerateKeyPair,
   list: handleList,
   set: handleSet,
   get: handleGet,
@@ -20,12 +23,30 @@ const commandHandler = {
 };
 
 if (commandHandler.hasOwnProperty(subcommand)) {
-  commandHandler[subcommand]();
+  try {
+    commandHandler[subcommand]();
+  } catch (error) {
+    console.log(error.message);
+
+    process.exit(1);
+  }
 } else {
   console.log('Usage: secrets [generate-keypair|list|set|get|dump]\n');
 }
 
 process.exit(0);
+
+function handleGenerateKeyPair() {
+  const handler: GenerateKeypairHandler = new GenerateKeypairHandler();
+  const command: GenerateKeypairCommand = new GenerateKeypairCommand(
+    privateKeyPath,
+    publicKeyPath,
+  );
+
+  const result = handler.handle(command);
+
+  console.table(result);
+}
 
 function encrypt(toEncrypt, publicKey) {
   const buffer = Buffer.from(toEncrypt, 'utf8');
@@ -41,47 +62,8 @@ function decrypt(toDecrypt, privateKey) {
   return decrypted.toString('utf8');
 }
 
-function keysExists() {
-  return fs.existsSync(privateKeyPath) || fs.existsSync(publicKeyPath);
-}
-
 function encryptedFileExists() {
   return fs.existsSync(encryptedDataPath);
-}
-
-function generateKeyPair(privateKeyPath, publicKeyPath) {
-  const keyPair = crypto.generateKeyPairSync('rsa', {
-    modulusLength: 4096,
-  });
-
-  const publicKey = keyPair.publicKey.export({
-    type: 'pkcs1',
-    format: 'pem',
-  });
-
-  const privateKey = keyPair.privateKey.export({
-    type: 'pkcs1',
-    format: 'pem',
-  });
-
-  fs.writeFileSync(publicKeyPath, publicKey);
-
-  fs.writeFileSync(privateKeyPath, privateKey);
-
-  const dataToShow = [
-    { type: 'public', path: publicKeyPath, value: truncate(publicKey) },
-    { type: 'private', path: privateKeyPath, value: truncate(privateKey) },
-  ];
-
-  console.table(dataToShow);
-}
-
-function truncate(string, limit = 20) {
-  if (string.length <= limit) {
-    return string;
-  }
-
-  return string.slice(0, limit) + '...';
 }
 
 function loadSecrets(truncateValue = false) {
@@ -103,18 +85,6 @@ function loadSecrets(truncateValue = false) {
   return dataArray;
 }
 
-function handleGenereateKeyPair() {
-  if (keysExists()) {
-    console.error(
-      'Keypair already exists. Remove it before generate new keypair.\n',
-    );
-
-    process.exit(1);
-  }
-
-  generateKeyPair(privateKeyPath, publicKeyPath);
-}
-
 function handleList() {
   if (!encryptedFileExists()) {
     console.error('Secrets file not found.\n');
@@ -126,7 +96,7 @@ function handleList() {
 }
 
 function handleSet() {
-  if (!keysExists()) {
+  if (!keysExists(privateKeyPath, publicKeyPath)) {
     console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
     process.exit(1);
   }
@@ -149,7 +119,7 @@ function handleGet() {
     process.exit(1);
   }
 
-  if (!keysExists()) {
+  if (!keysExists(privateKeyPath, publicKeyPath)) {
     console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
     process.exit(1);
   }
@@ -174,7 +144,7 @@ function handleDump() {
     process.exit(1);
   }
 
-  if (!keysExists()) {
+  if (!keysExists(privateKeyPath, publicKeyPath)) {
     console.log('Keypair not found, run before:\n\tsecrets generate-keypair');
     process.exit(1);
   }
