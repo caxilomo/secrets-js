@@ -1,22 +1,15 @@
 #!/usr/bin/env node
 
-import fs from 'fs';
-import {
-  decrypt,
-  encryptedFileExists,
-  keysExists,
-  loadSecrets,
-} from './appiclation/services';
 import { GenerateKeypairHandler } from './appiclation/generate-keypair/generate-keypair.handler';
 import { GenerateKeypairCommand } from './appiclation/generate-keypair/generate-keypair.command';
 import { ListHandler } from './appiclation/list/list.handler';
 import { ListCommand } from './appiclation/list/list.command';
-import { KeyPairNotFoundException } from './domain/exception/key-pair-not-found.exception';
-import { SecretsFileNotFoundException } from './domain/exception/secrets-file-not-found.exception';
 import { SetHandler } from './appiclation/set/set.handler';
 import { SetCommand } from './appiclation/set/set.command';
 import { GetHandler } from './appiclation/get/get.handler';
 import { GetCommand } from './appiclation/get/get.command';
+import { DumpHandler } from './appiclation/dump/dump.handler';
+import { DumpCommand } from './appiclation/dump/dump.command';
 
 const args = process.argv;
 const privateKeyPath = process.env.PWD + '/private.pem';
@@ -99,22 +92,15 @@ function handleGet() {
 }
 
 function handleDump() {
-  if (!encryptedFileExists(encryptedDataPath)) {
-    throw new SecretsFileNotFoundException();
-  }
+  const handler: DumpHandler = new DumpHandler();
+  const command: DumpCommand = new DumpCommand(
+    privateKeyPath,
+    publicKeyPath,
+    encryptedDataPath,
+    decryptedDataPath,
+  );
 
-  if (!keysExists(privateKeyPath, publicKeyPath)) {
-    throw new KeyPairNotFoundException();
-  }
+  const result = handler.handle(command);
 
-  const privateKey = fs.readFileSync(privateKeyPath, 'utf8').toString();
-  const dumpedContent = [];
-  loadSecrets(encryptedDataPath).forEach((secret) => {
-    secret.value = decrypt(secret.value, privateKey);
-    dumpedContent.push(secret.key + '=' + secret.value);
-  });
-
-  fs.writeFileSync(decryptedDataPath, dumpedContent.join('\n'));
-
-  console.log('Secrets dumped to: ' + decryptedDataPath + '\n');
+  console.log('Secrets dumped to: ' + result + '\n');
 }
